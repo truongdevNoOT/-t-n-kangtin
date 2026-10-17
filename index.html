@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Đặt Suất Ăn & Điểm Danh Nội Bộ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Quét Camera trực tiếp & Quét ảnh QR -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <!-- Thư viện đọc trực tiếp file Excel trên trình duyệt -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen p-2 md:p-6 text-slate-800 font-sans">
+  <div class="max-w-lg mx-auto bg-white rounded-2xl shadow border border-slate-200 overflow-hidden">
+    
+    <datalist id="mainEmpSuggestions"></datalist>
+    <datalist id="repEmpSuggestions"></datalist>
+    <datalist id="extraEmpSuggestions"></datalist>
+    <datalist id="scanEmpSuggestions"></datalist>
+
+    <!-- Thanh chuyển tab -->
+    <div class="flex border-b border-slate-200 bg-slate-50 text-center text-xs font-bold">
+      <button id="tabBtn1" type="button" onclick="switchTab(1)" class="flex-1 py-3 border-b-2 border-blue-600 text-blue-600 bg-white transition">
+        🍱 SUẤT CHÍNH
+      </button>
+      <button id="tabBtn2" type="button" onclick="switchTab(2)" class="flex-1 py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition">
+        🥐 TĂNG CA
+      </button>
+      <button id="tabBtn3" type="button" onclick="switchTab(3)" class="flex-1 py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition">
+        📷 QUÉT ĂN
+      </button>
+    </div>
+
+    <!-- Màn hình tải dữ liệu -->
+    <div id="loading" class="p-8 text-center text-slate-500 text-sm">
+      <div class="animate-spin w-7 h-7 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+      Đang kết nối cơ sở dữ liệu...
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 1: FORM BÁO SUẤT CHÍNH -->
+    <!-- ========================================================================= -->
+    <form id="formMain" class="hidden p-4 space-y-4">
+      <div id="mainLockNotice" class="hidden text-xs text-rose-700 font-bold bg-rose-50 p-2.5 rounded-lg border border-rose-200 text-center">
+        ⛔ Đã quá 09:00! Cổng báo suất chính đã đóng.
+      </div>
+
+      <div class="bg-blue-50 border-l-4 border-blue-500 p-2.5 rounded text-xs text-blue-800">
+        Báo tổng số suất ăn theo ca cho bộ phận (Chốt lúc <b>09:00</b>).
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">1. Bộ phận <span class="text-rose-500">*</span></label>
+          <select id="m_dept" required onchange="onDeptSelected('main')" 
+                  class="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="">-- Chọn bộ phận --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">2. Mã NV báo <span class="text-rose-500">*</span></label>
+          <input type="text" id="m_empCode" list="mainEmpSuggestions" required placeholder="VD: V26-0076" 
+                 oninput="this.value = this.value.toUpperCase().trim(); onEmpCodeLookup('main')" 
+                 class="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-blue-500 font-semibold uppercase">
+          <div id="m_empNameTag" class="text-[11px] font-bold text-emerald-600 mt-1 min-h-[16px]"></div>
+        </div>
+      </div>
+
+      <div class="border border-slate-200 p-3 rounded-xl space-y-2.5 bg-slate-50">
+        <div class="flex justify-between items-center">
+          <label class="text-xs font-bold text-slate-700 uppercase">Số lượng suất ăn từng ca:</label>
+          <span class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full" id="mainTotalBadge">Tổng: 0 suất</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span><b>Ca 1</b> (Ăn lúc 11:00)</span>
+          <input type="number" id="ca1" min="0" value="0" oninput="calculateMainTotal()" class="w-20 border border-slate-300 p-1.5 rounded text-center font-bold bg-white">
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span><b>Ca 4 - HC</b> (Ăn lúc 12:00)</span>
+          <input type="number" id="ca4" min="0" value="0" oninput="calculateMainTotal()" class="w-20 border border-slate-300 p-1.5 rounded text-center font-bold bg-white">
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span><b>Ca 2</b> (Ăn 17:00 - 18:30)</span>
+          <input type="number" id="ca2" min="0" value="0" oninput="calculateMainTotal()" class="w-20 border border-slate-300 p-1.5 rounded text-center font-bold bg-white">
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <span><b>Ca 3</b> (Ăn 00:20 - 02:00)</span>
+          <input type="number" id="ca3" min="0" value="0" oninput="calculateMainTotal()" class="w-20 border border-slate-300 p-1.5 rounded text-center font-bold bg-white">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Ghi chú</label>
+        <input type="text" id="m_note" placeholder="VD: Báo thêm suất khách..." class="w-full border border-slate-300 rounded-lg p-2 text-xs outline-none">
+      </div>
+
+      <button type="submit" id="btnMainSubmit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl shadow transition">
+        Xác Nhận Báo Suất Chính
+      </button>
+    </form>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 2: FORM BÁO TĂNG CA (TỰ ĐỘNG NHẬP EXCEL) -->
+    <!-- ========================================================================= -->
+    <form id="formExtra" class="hidden p-4 space-y-4">
+      <div id="extraLockNotice" class="hidden text-xs text-rose-700 font-bold bg-rose-50 p-2.5 rounded-lg border border-rose-200 text-center">
+        ⛔ Đã quá 15:15! Cổng đăng ký suất tăng ca đã đóng.
+      </div>
+
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-2.5 rounded text-xs text-amber-800">
+        Đăng ký suất ăn tăng ca cho bộ phận (Chốt lúc <b>15:15</b>).
+      </div>
+
+      <!-- KHU VỰC NHẬP FILE EXCEL TỰ ĐỘNG -->
+      <div class="border-2 border-dashed border-amber-300 bg-amber-50/60 rounded-xl p-3 text-center transition hover:bg-amber-100/50">
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(this)">
+        <label for="excelFileInput" class="cursor-pointer flex flex-col items-center justify-center space-y-1">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <span>📂 BẤM ĐỂ TẢI FILE EXCEL ĐĂNG KÝ LÀM THÊM</span>
+          </div>
+          <span class="text-[11px] text-slate-500">Tự động lọc người ăn (Y), lấy mã, tên và món ăn từ file</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">1. Bộ phận <span class="text-rose-500">*</span></label>
+          <select id="e_dept" required onchange="onDeptSelected('extra')" 
+                  class="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-amber-500">
+            <option value="">-- Chọn bộ phận --</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 uppercase mb-1">2. Mã NV người lập <span class="text-rose-500">*</span></label>
+          <input type="text" id="e_reporterCode" list="repEmpSuggestions" required placeholder="VD: V26-0076" 
+                 oninput="this.value = this.value.toUpperCase().trim(); onEmpCodeLookup('extra_rep')" 
+                 class="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs outline-none focus:ring-2 focus:ring-amber-500 font-semibold uppercase">
+          <div id="e_repNameTag" class="text-[11px] font-bold text-emerald-600 mt-1 min-h-[16px]"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex justify-between items-center mb-2">
+          <label class="text-xs font-bold text-slate-700 uppercase" id="extraCountLabel">Danh sách nhân viên tăng ca:</label>
+          <button type="button" onclick="addEmployeeRow(true)" class="text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold py-1 px-2.5 rounded-lg border border-amber-300 transition">
+            + Thêm người
+          </button>
+        </div>
+        <div id="employeeListContainer" class="space-y-2.5 max-h-[360px] overflow-y-auto pr-1"></div>
+      </div>
+
+      <button type="submit" id="btnExtraSubmit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl shadow transition">
+        Gửi Toàn Bộ Danh Sách Tăng Ca
+      </button>
+    </form>
+
+    <!-- ========================================================================= -->
+    <!-- TAB 3: QUÉT MÃ QR TRỰC TIẾP TỪ WEBCAM (KHÔNG BỊ CHẶN) -->
+    <!-- ========================================================================= -->
+    <div id="tabScan" class="hidden p-4 space-y-4">
+      <div class="bg-slate-100 p-1.5 rounded-2xl border border-slate-300">
+        <div class="text-[11px] font-bold text-slate-500 uppercase px-1 mb-1">Chọn bữa điểm danh:</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="btnModeMain" onclick="setScanMode('MAIN')" 
+                  class="py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow bg-blue-600 text-white">
+            🍱 1. BỮA CHÍNH
+          </button>
+          <button type="button" id="btnModeExtra" onclick="setScanMode('EXTRA')" 
+                  class="py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-600 hover:bg-white">
+            🥐 2. BỮA TĂNG CA
+          </button>
+        </div>
+      </div>
+
+      <div id="scanModeAlert" class="bg-blue-50 border-l-4 border-blue-500 p-2.5 rounded text-xs text-blue-800 font-medium">
+        Đang quét: <b>BỮA CHÍNH</b>.
+      </div>
+
+      <!-- Vùng hiển thị camera -->
+      <div class="bg-slate-900 rounded-xl overflow-hidden relative border border-slate-300 min-h-[240px] flex items-center justify-center">
+        <div id="qr-reader" class="w-full"></div>
+        <div id="cameraPlaceholder" class="text-center text-slate-400 p-4">
+          <svg class="w-12 h-12 mx-auto mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="text-xs">Camera đang tắt</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" id="btnToggleCamera" onclick="toggleCamera()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-xl text-xs transition">
+          📷 Bật Camera Trực Tiếp
+        </button>
+        <label class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs text-center cursor-pointer transition flex items-center justify-center shadow">
+          🖼️ Tải / Chụp Ảnh Thẻ
+          <input type="file" accept="image/*" capture="environment" id="qrFileInput" onchange="scanQrFromFile(this)" class="hidden">
+        </label>
+      </div>
+
+      <!-- Nhập tay / Máy quét barcode USB -->
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+        <label class="block text-xs font-bold text-slate-700 uppercase">Quên thẻ / Nhập tay hoặc máy tít:</label>
+        <div class="flex gap-2">
+          <input type="text" id="manualEmpCode" list="scanEmpSuggestions" placeholder="Nhập Mã NV (VD: V26-0076)" 
+                 oninput="this.value = this.value.toUpperCase().trim()"
+                 onkeydown="if(event.key === 'Enter') submitManualCheckIn()"
+                 class="flex-1 bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold uppercase outline-none focus:ring-2 focus:ring-emerald-500">
+          <button type="button" onclick="submitManualCheckIn()" id="btnManualSubmit" class="bg-slate-800 hover:bg-black text-white px-4 py-2 rounded-lg text-xs font-bold transition">
+            Xác Nhận
+          </button>
+        </div>
+      </div>
+
+      <div id="scanResultBox" class="hidden p-4 rounded-xl border text-center transition">
+        <div id="scanResultIcon" class="text-3xl mb-1"></div>
+        <div id="scanResultTitle" class="text-sm font-bold"></div>
+        <div id="scanResultDesc" class="text-xs mt-1 font-semibold"></div>
+        <div id="scanResultDish" class="text-xs mt-1 text-emerald-800 font-bold bg-white/70 py-1 px-2 rounded-lg inline-block border border-emerald-300 hidden"></div>
+      </div>
+
+      <div class="border border-slate-200 rounded-xl p-3 bg-slate-50">
+        <div class="text-[11px] font-bold text-slate-600 uppercase mb-2 flex justify-between">
+          <span>Lịch sử vừa quét:</span>
+          <span id="sessionScanCount" class="text-emerald-600 font-bold">0 lượt</span>
+        </div>
+        <div id="recentScanList" class="space-y-1.5 max-h-40 overflow-y-auto text-xs pr-1">
+          <div class="text-slate-400 text-center py-2 text-[11px] italic">Chưa có lượt quét nào</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hộp thông báo hoàn tất -->
+    <div id="successBox" class="hidden p-8 text-center">
+      <div class="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl mb-2 font-bold">✓</div>
+      <h2 class="text-base font-bold text-slate-800" id="successMsg">Đã Lưu Thành Công!</h2>
+      <p class="text-xs text-slate-500 mt-1">Dữ liệu đã tự động đồng bộ vào bảng tính nhà bếp.</p>
+      <button type="button" onclick="window.location.reload()" class="mt-4 inline-block px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs text-blue-600 font-semibold transition">
+        Tiếp tục nhập báo cáo mới
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. CẤU HÌNH LIÊN KẾT API VỀ GOOGLE APPS SCRIPT
+    // =========================================================================
+    const GAS_API_URL = "script.google.com/macros/s/AKfycbwx6KAshZ8NyV3sOqG6c4cPcALWqzV7JeH0kCFCAc4x7isIpPjO6DJVjW6yPKkgXeCimQ/exec";
+
+    let configData = { employees: {}, departments: [], isMainLocked: false, isExtraLocked: false };
+    let html5QrScanner = null;
+    let isCameraRunning = false;
+    let isProcessingScan = false;
+    let sessionCount = 0;
+    let currentScanMeal = "MAIN";
+
+    // Hàm gọi API trung tâm qua fetch (Chuẩn REST API độc lập, không phụ thuộc google.script)
+    async function callGasApi(action, payload = {}) {
+      if (action === "getAppConfig") {
+        const res = await fetch(`${GAS_API_URL}?action=getAppConfig`);
+        return await res.json();
+      }
+
+      const res = await fetch(GAS_API_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: action, ...payload })
+      });
+      return await res.json();
+    }
+
+    // =========================================================================
+    // 2. TỰ ĐỘNG ĐỌC & XỬ LÝ FILE EXCEL
+    // =========================================================================
+    function handleExcelImport(inputElem) {
+      if (!inputElem.files || !inputElem.files[0]) return;
+      const file = inputElem.files[0];
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          const sheetName = workbook.SheetNames.includes('Overtime') ? 'Overtime' : workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+          if (!rows || rows.length === 0) {
+            alert("File Excel không có dữ liệu!");
+            return;
+          }
+
+          let headerIdx = -1;
+          let colCode = 1, colName = 2, colDept = 9, colUseMeal = 24, colRemark = 25;
+
+          for (let r = 0; r < rows.length; r++) {
+            const rowVals = rows[r].map(v => String(v).trim().toLowerCase());
+            if (rowVals.some(v => v.includes("mã nhân viên") || v.includes("employee code"))) {
+              headerIdx = r;
+              for (let c = 0; c < rowVals.length; c++) {
+                const val = rowVals[c];
+                if (val.includes("mã nhân viên") || val.includes("employee code")) colCode = c;
+                if (val.includes("tên nhân viên") || val.includes("full name")) colName = c;
+                if (val.includes("tên phòng") || val.includes("department name") || val.includes("tên bộ phận")) colDept = c;
+                if (val.includes("dùng bữa ăn") || val.includes("use meal")) colUseMeal = c;
+                if (val.includes("ghi chú") || val.includes("remark")) colRemark = c;
+              }
+              break;
+            }
+          }
+
+          if (headerIdx === -1) {
+            alert("Không tìm thấy dòng tiêu đề 'Mã nhân viên' trong file Excel!");
+            return;
+          }
+
+          const importedList = [];
+          let detectedDept = "";
+
+          for (let r = headerIdx + 1; r < rows.length; r++) {
+            const row = rows[r];
+            if (!row || row.length === 0) continue;
+
+            const rawCode = String(row[colCode] || "").trim().toUpperCase();
+            if (!rawCode || rawCode === "NAN" || rawCode.length < 5) continue;
+
+            // Bỏ qua người không ăn (Use Meal = 'N')
+            const useMeal = String(row[colUseMeal] || "").trim().toUpperCase();
+            if (useMeal === 'N') continue;
+
+            let name = String(row[colName] || "").trim();
+            if (!name && configData.employees[rawCode]) {
+              name = configData.employees[rawCode].name;
+            }
+
+            const deptInRow = String(row[colDept] || "").trim();
+            if (deptInRow && !detectedDept) detectedDept = deptInRow;
+            if (!detectedDept && configData.employees[rawCode]) {
+              detectedDept = configData.employees[rawCode].dept;
+            }
+
+            // Tự động phân loại món ăn
+            const remark = String(row[colRemark] || "").trim();
+            const remLower = remark.toLowerCase();
+            let dish = "Bún / Phở";
+            if (remLower.includes("bánh") || remLower.includes("banh") || remLower.includes("sữa") || remLower.includes("sua")) {
+              dish = "Bánh mỳ sữa";
+            } else if (remLower.includes("mỳ") || remLower.includes("mì") || remLower.includes("my") || remLower.includes("bún") || remLower.includes("phở")) {
+              dish = "Bún / Phở";
+            }
+
+            importedList.push({
+              code: rawCode,
+              name: name,
+              dish: dish,
+              note: remark
+            });
+          }
+
+          if (importedList.length === 0) {
+            alert("Không tìm thấy nhân viên nào có đăng ký ăn tăng ca (Use Meal = 'Y')!");
+            return;
+          }
+
+          // Tự động chọn Bộ phận trên form
+          if (detectedDept) {
+            const eDeptSelect = document.getElementById('e_dept');
+            for (let i = 0; i < eDeptSelect.options.length; i++) {
+              const optVal = eDeptSelect.options[i].value.toUpperCase();
+              if (optVal.includes(detectedDept.toUpperCase()) || detectedDept.toUpperCase().includes(optVal)) {
+                eDeptSelect.selectedIndex = i;
+                onDeptSelected('extra');
+                break;
+              }
+            }
+          }
+
+          // Điền danh sách vào giao diện
+          const container = document.getElementById('employeeListContainer');
+          container.innerHTML = "";
+
+          importedList.forEach(item => {
+            addEmployeeRow(false, item.code, item.name, item.dish, item.note);
+          });
+
+          document.getElementById('extraCountLabel').innerText = `Danh sách tăng ca: (${importedList.length} người)`;
+          alert(`✅ Đã tải thành công ${importedList.length} nhân viên tăng ca từ file Excel!`);
+
+        } catch (err) {
+          console.error(err);
+          alert("Lỗi khi đọc file Excel: " + err.message);
+        } finally {
+          inputElem.value = "";
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // =========================================================================
+    // 3. TIỆN ÍCH & ĐIỀU HƯỚNG
+    // =========================================================================
+    function playBeep(type) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (type === 'success') {
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.15);
+        } else {
+          osc.frequency.setValueAtTime(220, ctx.currentTime);
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        }
+      } catch(e) {}
+    }
+
+    function switchTab(tabIndex) {
+      const b1 = document.getElementById('tabBtn1');
+      const b2 = document.getElementById('tabBtn2');
+      const b3 = document.getElementById('tabBtn3');
+      const f1 = document.getElementById('formMain');
+      const f2 = document.getElementById('formExtra');
+      const t3 = document.getElementById('tabScan');
+      document.getElementById('successBox').classList.add('hidden');
+
+      b1.className = "flex-1 py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition";
+      b2.className = "flex-1 py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition";
+      b3.className = "flex-1 py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition";
+      f1.classList.add('hidden');
+      f2.classList.add('hidden');
+      t3.classList.add('hidden');
+
+      if (tabIndex === 1) {
+        b1.className = "flex-1 py-3 border-b-2 border-blue-600 text-blue-600 bg-white transition";
+        f1.classList.remove('hidden');
+        stopCamera();
+      } else if (tabIndex === 2) {
+        b2.className = "flex-1 py-3 border-b-2 border-amber-600 text-amber-600 bg-white transition";
+        f2.classList.remove('hidden');
+        stopCamera();
+      } else {
+        b3.className = "flex-1 py-3 border-b-2 border-emerald-600 text-emerald-600 bg-white transition";
+        t3.classList.remove('hidden');
+        setTimeout(() => document.getElementById('manualEmpCode').focus(), 300);
+      }
+    }
+
+    function setScanMode(mode) {
+      currentScanMeal = mode;
+      const btnMain = document.getElementById('btnModeMain');
+      const btnExtra = document.getElementById('btnModeExtra');
+      const alertBox = document.getElementById('scanModeAlert');
+
+      if (mode === "MAIN") {
+        btnMain.className = "py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow bg-blue-600 text-white";
+        btnExtra.className = "py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-600 hover:bg-white";
+        alertBox.className = "bg-blue-50 border-l-4 border-blue-500 p-2.5 rounded text-xs text-blue-800 font-medium";
+        alertBox.innerHTML = "Đang quét: <b>BỮA CHÍNH</b>.";
+      } else {
+        btnExtra.className = "py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow bg-amber-600 text-white";
+        btnMain.className = "py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-slate-600 hover:bg-white";
+        alertBox.className = "bg-amber-50 border-l-4 border-amber-500 p-2.5 rounded text-xs text-amber-800 font-medium";
+        alertBox.innerHTML = "Đang quét: <b>BỮA TĂNG CA</b> (Bắt buộc phải có tên trong danh sách đăng ký tăng ca).";
+      }
+    }
+
+    function initScanModeByTime() {
+      const currentHour = new Date().getHours();
+      if (currentHour >= 14) setScanMode("EXTRA");
+      else setScanMode("MAIN");
+    }
+
+    // =========================================================================
+    // 4. CAMERA QUÉT TRỰC TIẾP
+    // =========================================================================
+    function toggleCamera() {
+      if (isCameraRunning) stopCamera();
+      else startCamera();
+    }
+
+    function startCamera() {
+      const qrBox = document.getElementById('qr-reader');
+      const placeholder = document.getElementById('cameraPlaceholder');
+      const btn = document.getElementById('btnToggleCamera');
+
+      placeholder.classList.add('hidden');
+      qrBox.classList.remove('hidden');
+
+      if (!html5QrScanner) {
+        html5QrScanner = new Html5Qrcode("qr-reader");
+      }
+
+      Html5Qrcode.getCameras().then(devices => {
+        if (!devices || devices.length === 0) throw new Error("Không tìm thấy camera trên thiết bị!");
+
+        let selectedCameraId = devices[0].id;
+        for (let i = 0; i < devices.length; i++) {
+          const label = (devices[i].label || "").toLowerCase();
+          if (label.includes("back") || label.includes("rear") || label.includes("sau")) {
+            selectedCameraId = devices[i].id;
+            break;
+          }
+        }
+
+        return html5QrScanner.start(
+          selectedCameraId,
+          {
+            fps: 15,
+            qrbox: (w, h) => {
+              const minEdge = Math.min(w, h);
+              return { width: Math.floor(minEdge * 0.7), height: Math.floor(minEdge * 0.7) };
+            },
+            aspectRatio: 1.0
+          },
+          (decodedText) => { onQrCodeDetected(decodedText); },
+          () => {}
+        );
+      }).then(() => {
+        isCameraRunning = true;
+        btn.innerText = "🛑 Tắt Camera";
+        btn.className = "bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 rounded-xl text-xs transition";
+      }).catch(err => {
+        stopCamera();
+        alert("Lỗi Camera: " + (err.message || err));
+      });
+    }
+
+    function stopCamera() {
+      if (html5QrScanner && isCameraRunning) {
+        html5QrScanner.stop().then(() => {
+          isCameraRunning = false;
+          resetCameraUI();
+        }).catch(() => {
+          isCameraRunning = false;
+          resetCameraUI();
+        });
+      } else {
+        resetCameraUI();
+      }
+    }
+
+    function resetCameraUI() {
+      document.getElementById('cameraPlaceholder').classList.remove('hidden');
+      document.getElementById('qr-reader').classList.add('hidden');
+      const btn = document.getElementById('btnToggleCamera');
+      btn.innerText = "📷 Bật Camera Trực Tiếp";
+      btn.className = "bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-xl text-xs transition";
+    }
+
+    function onQrCodeDetected(decodedText) {
+      if (isProcessingScan) return;
+      isProcessingScan = true;
+
+      let code = decodedText.trim();
+      if (code.includes("/")) code = code.split("/").pop();
+
+      executeCheckIn(code, () => {
+        setTimeout(() => { isProcessingScan = false; }, 1800);
+      });
+    }
+
+    function scanQrFromFile(inputElem) {
+      if (!inputElem.files || !inputElem.files[0]) return;
+      const file = inputElem.files[0];
+      showScanFeedback('loading', 'Đang nhận diện mã QR từ ảnh...', '');
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          const maxDim = 1000;
+          let width = img.width, height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const imageData = ctx.getImageData(0, 0, width, height);
+          let codeResult = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" })
+                        || jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+
+          if (codeResult && codeResult.data) {
+            let text = codeResult.data.trim();
+            if (text.includes("/")) text = text.split("/").pop();
+            executeCheckIn(text);
+          } else {
+            playBeep('error');
+            showScanFeedback('error', 'Không tìm thấy mã QR', 'Vui lòng chụp ảnh góc thẳng, rõ nét.');
+          }
+          inputElem.value = "";
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function submitManualCheckIn() {
+      const input = document.getElementById('manualEmpCode');
+      const code = input.value.trim().toUpperCase();
+      if (!code) {
+        alert("Vui lòng nhập mã nhân viên!");
+        return;
+      }
+      const btn = document.getElementById('btnManualSubmit');
+      btn.disabled = true;
+      btn.innerText = "...";
+
+      executeCheckIn(code, () => {
+        btn.disabled = false;
+        btn.innerText = "Xác Nhận";
+        input.value = "";
+        input.focus();
+      });
+    }
+
+    async function executeCheckIn(empCode, callback) {
+      showScanFeedback('loading', `Đang đối soát [${empCode}]...`, '');
+
+      try {
+        const json = await callGasApi("checkInEmployee", { empCode: empCode, mealType: currentScanMeal });
+        if (json.status === "error") throw new Error(json.message);
+
+        const res = json.data;
+        if (res.success) {
+          playBeep('success');
+          const dishNote = res.dishDetail ? `👉 MÓN ĐÃ ĐẶT: ${res.dishDetail}` : '';
+          showScanFeedback('success', `✓ ĐÃ ĐIỂM DANH: ${res.mealLabel.toUpperCase()}`, `${res.empCode} - ${res.name} (${res.dept})`, dishNote);
+          addRecentScanRow(res.empCode, res.name, res.dept, `${res.mealLabel} (${res.dishDetail || 'Cơm'})`, res.time, true);
+        } else if (res.status === 'NOT_REGISTERED') {
+          playBeep('error');
+          showScanFeedback('error', `❌ KHÔNG CÓ TRONG DANH SÁCH TĂNG CA!`, `${res.empCode} - ${res.name} (${res.dept})`);
+          addRecentScanRow(res.empCode, res.name, res.dept, 'Chưa đăng ký tăng ca', 'Từ chối', false);
+        } else if (res.status === 'DUPLICATE') {
+          playBeep('error');
+          showScanFeedback('duplicate', `⚠️ TRÙNG LẶP: ${res.message}`, `${res.empCode} - ${res.name} (${res.dept})`);
+          addRecentScanRow(res.empCode, res.name, res.dept, res.mealLabel, 'Đã ăn trước đó', false);
+        } else {
+          playBeep('error');
+          showScanFeedback('error', `❌ ${res.message}`, `Vui lòng kiểm tra lại.`);
+        }
+      } catch (err) {
+        playBeep('error');
+        showScanFeedback('error', 'Lỗi hệ thống', err.message);
+      } finally {
+        if (callback) callback();
+      }
+    }
+
+    function showScanFeedback(type, title, desc, dishText) {
+      const box = document.getElementById('scanResultBox');
+      const icon = document.getElementById('scanResultIcon');
+      const titleElem = document.getElementById('scanResultTitle');
+      const descElem = document.getElementById('scanResultDesc');
+      const dishElem = document.getElementById('scanResultDish');
+
+      box.classList.remove('hidden', 'bg-emerald-50', 'border-emerald-300', 'text-emerald-800', 
+                               'bg-amber-50', 'border-amber-300', 'text-amber-800', 
+                               'bg-rose-50', 'border-rose-300', 'text-rose-800', 
+                               'bg-slate-100', 'border-slate-300', 'text-slate-700');
+
+      if (type === 'success') {
+        box.classList.add('bg-emerald-50', 'border-emerald-300', 'text-emerald-800');
+        icon.innerText = '✅';
+      } else if (type === 'duplicate') {
+        box.classList.add('bg-amber-50', 'border-amber-300', 'text-amber-800');
+        icon.innerText = '⚠️';
+      } else if (type === 'loading') {
+        box.classList.add('bg-slate-100', 'border-slate-300', 'text-slate-700');
+        icon.innerText = '⏳';
+      } else {
+        box.classList.add('bg-rose-50', 'border-rose-300', 'text-rose-800');
+        icon.innerText = '❌';
+      }
+
+      titleElem.innerText = title;
+      descElem.innerText = desc;
+
+      if (dishText) {
+        dishElem.innerText = dishText;
+        dishElem.classList.remove('hidden');
+      } else {
+        dishElem.classList.add('hidden');
+      }
+    }
+
+    function addRecentScanRow(code, name, dept, mealInfo, time, isSuccess) {
+      const container = document.getElementById('recentScanList');
+      if (sessionCount === 0) container.innerHTML = '';
+
+      sessionCount++;
+      document.getElementById('sessionScanCount').innerText = `${sessionCount} lượt`;
+
+      const row = document.createElement('div');
+      row.className = `flex justify-between items-center p-2 rounded-lg border text-xs ${
+        isSuccess ? 'bg-white border-slate-200' : 'bg-rose-50 border-rose-200 text-rose-700'
+      }`;
+      row.innerHTML = `
+        <div class="truncate pr-2">
+          <b>${code}</b> - ${name} <span class="text-slate-500 text-[10px]">(${dept})</span>
+          <div class="text-[10px] font-semibold text-blue-600">${mealInfo}</div>
+        </div>
+        <div class="font-bold text-[10px] shrink-0 ${isSuccess ? 'text-emerald-600' : 'text-rose-600'}">
+          ${time}
+        </div>
+      `;
+      container.prepend(row);
+    }
+
+    function calculateMainTotal() {
+      const c1 = parseInt(document.getElementById('ca1').value, 10) || 0;
+      const c4 = parseInt(document.getElementById('ca4').value, 10) || 0;
+      const c2 = parseInt(document.getElementById('ca2').value, 10) || 0;
+      const c3 = parseInt(document.getElementById('ca3').value, 10) || 0;
+      const total = c1 + c4 + c2 + c3;
+      document.getElementById('mainTotalBadge').innerText = `Tổng: ${total} suất`;
+      return total;
+    }
+
+    function onDeptSelected(mode) {
+      let dept = (mode === 'main') ? document.getElementById('m_dept').value : document.getElementById('e_dept').value;
+      if (dept) localStorage.setItem('app_dept', dept);
+      if (mode === 'main') {
+        updateDatalist('mainEmpSuggestions', dept);
+        onEmpCodeLookup('main');
+      } else {
+        updateDatalist('repEmpSuggestions', dept);
+        updateDatalist('extraEmpSuggestions', dept);
+        onEmpCodeLookup('extra_rep');
+      }
+    }
+
+    function updateDatalist(datalistId, filterDept) {
+      const datalist = document.getElementById(datalistId);
+      if (!datalist) return;
+      datalist.innerHTML = "";
+
+      for (const [code, info] of Object.entries(configData.employees || {})) {
+        if (!filterDept || info.dept === filterDept) {
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.label = `${code} - ${info.name}`;
+          datalist.appendChild(opt);
+        }
+      }
+    }
+
+    function onEmpCodeLookup(mode) {
+      let codeInput = (mode === 'main') ? document.getElementById('m_empCode') : document.getElementById('e_reporterCode');
+      let nameTag = (mode === 'main') ? document.getElementById('m_empNameTag') : document.getElementById('e_repNameTag');
+
+      const code = codeInput.value.trim().toUpperCase();
+      const info = configData.employees[code];
+
+      if (info) {
+        nameTag.innerText = `✓ Họ tên: ${info.name}`;
+        nameTag.className = "text-[11px] font-bold text-emerald-600 mt-1 truncate";
+      } else if (code.length >= 7) {
+        nameTag.innerText = "⚠️ Mã NV chưa có trong danh bạ";
+        nameTag.className = "text-[11px] font-medium text-amber-600 mt-1 truncate";
+      } else {
+        nameTag.innerText = "";
+      }
+    }
+
+    function onRowEmpCodeChange(inputElem) {
+      const code = inputElem.value.trim().toUpperCase();
+      const row = inputElem.closest('.emp-row-card');
+      if (!row) return;
+
+      const nameInput = row.querySelector('.emp-name');
+      const hintElem = row.querySelector('.row-hint');
+      const info = configData.employees[code];
+
+      if (info) {
+        nameInput.value = info.name;
+        nameInput.classList.add('bg-emerald-50', 'border-emerald-400');
+        hintElem.innerText = `✓ ${info.dept}`;
+        hintElem.className = "row-hint text-[10px] text-emerald-600 font-semibold truncate";
+      } else {
+        nameInput.classList.remove('bg-emerald-50', 'border-emerald-400');
+        if (code.length >= 7) {
+          hintElem.innerText = "⚠️ Chưa có trong danh bạ";
+          hintElem.className = "row-hint text-[10px] text-amber-600 truncate";
+        } else {
+          hintElem.innerText = "Gõ mã NV để tự nhảy tên";
+          hintElem.className = "row-hint text-[10px] text-slate-400 truncate";
+        }
+      }
+    }
+
+    function addEmployeeRow(shouldFocus = false, code = '', name = '', dish = 'Bún / Phở', note = '') {
+      const container = document.getElementById('employeeListContainer');
+      const rowId = 'row_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+
+      const div = document.createElement('div');
+      div.id = rowId;
+      div.className = "emp-row-card p-2.5 bg-slate-50 border border-slate-200 rounded-xl relative space-y-1.5";
+      div.innerHTML = `
+        <div class="flex justify-between items-center text-[11px] font-bold text-slate-600">
+          <span class="row-hint text-[10px] text-slate-400">Gõ mã NV để tự nhảy tên</span>
+          <button type="button" onclick="document.getElementById('${rowId}').remove()" class="text-rose-500 hover:text-rose-700 font-bold transition">✕ Xóa</button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <input type="text" placeholder="Mã NV (VD: V26-0076)" value="${code}" required 
+                 list="extraEmpSuggestions"
+                 oninput="this.value = this.value.toUpperCase().trim(); onRowEmpCodeChange(this)" 
+                 class="emp-code bg-white border border-slate-300 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500 font-semibold uppercase">
+          <input type="text" placeholder="Họ và tên (Tự động)" value="${name}" required 
+                 class="emp-name bg-white border border-slate-300 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500 font-medium">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <select class="emp-dish bg-white border border-slate-300 rounded p-1.5 text-xs font-medium text-slate-700 outline-none">
+            <option value="Bún / Phở" ${dish === 'Bún / Phở' ? 'selected' : ''}>Bún / Phở</option>
+            <option value="Bánh mỳ sữa" ${dish === 'Bánh mỳ sữa' ? 'selected' : ''}>Bánh mỳ sữa</option>
+          </select>
+          <input type="text" placeholder="Ghi chú" value="${note}" class="emp-note bg-white border border-slate-300 rounded p-1.5 text-xs outline-none">
+        </div>
+      `;
+      container.appendChild(div);
+
+      const codeInput = div.querySelector('.emp-code');
+      if (code) onRowEmpCodeChange(codeInput);
+      if (shouldFocus) {
+        codeInput.focus();
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    // =========================================================================
+    // 5. KHỞI TẠO NẠP DỮ LIỆU TỪ MÁY CHỦ QUA FETCH API
+    // =========================================================================
+    document.addEventListener("DOMContentLoaded", async function() {
+      const savedDept = localStorage.getItem('app_dept') || '';
+      const savedRepCode = localStorage.getItem('app_rep_code') || '';
+
+      initScanModeByTime();
+      addEmployeeRow(false);
+      addEmployeeRow(false);
+
+      try {
+        const json = await callGasApi("getAppConfig");
+        if (json.status === "error") throw new Error(json.message);
+
+        const conf = json.data;
+        configData = conf || { employees: {}, departments: [] };
+        document.getElementById('loading').classList.add('hidden');
+        switchTab(1);
+
+        const mDeptSelect = document.getElementById('m_dept');
+        const eDeptSelect = document.getElementById('e_dept');
+
+        (conf.departments || []).forEach(dept => {
+          const opt1 = document.createElement('option');
+          opt1.value = dept;
+          opt1.text = dept;
+          if (dept === savedDept) opt1.selected = true;
+          mDeptSelect.appendChild(opt1);
+
+          const opt2 = document.createElement('option');
+          opt2.value = dept;
+          opt2.text = dept;
+          if (dept === savedDept) opt2.selected = true;
+          eDeptSelect.appendChild(opt2);
+        });
+
+        onDeptSelected('main');
+        onDeptSelected('extra');
+        updateDatalist('scanEmpSuggestions', '');
+
+        if (savedRepCode) {
+          document.getElementById('m_empCode').value = savedRepCode;
+          document.getElementById('e_reporterCode').value = savedRepCode;
+          onEmpCodeLookup('main');
+          onEmpCodeLookup('extra_rep');
+        }
+
+        if (conf.isMainLocked) {
+          document.getElementById('btnMainSubmit').disabled = true;
+          document.getElementById('btnMainSubmit').classList.add('opacity-50', 'cursor-not-allowed');
+          document.getElementById('mainLockNotice').classList.remove('hidden');
+        }
+        if (conf.isExtraLocked) {
+          document.getElementById('btnExtraSubmit').disabled = true;
+          document.getElementById('btnExtraSubmit').classList.add('opacity-50', 'cursor-not-allowed');
+          document.getElementById('extraLockNotice').classList.remove('hidden');
+        }
+      } catch (err) {
+        document.getElementById('loading').innerHTML = `<div class="text-rose-500 font-bold p-4">Lỗi kết nối máy chủ: ${err.message}</div>`;
+      }
+    });
+
+    // =========================================================================
+    // 6. GỬI FORM SUẤT CHÍNH QUA FETCH API
+    // =========================================================================
+    document.getElementById('formMain').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const dept = document.getElementById('m_dept').value;
+      const total = calculateMainTotal();
+      if (!dept || total <= 0) {
+        alert("Vui lòng chọn bộ phận và nhập số suất hợp lệ!");
+        return;
+      }
+      const empCode = document.getElementById('m_empCode').value.trim().toUpperCase();
+      const btn = document.getElementById('btnMainSubmit');
+      btn.disabled = true;
+      btn.innerText = 'Đang gửi dữ liệu...';
+
+      const payload = {
+        department: dept,
+        empCode: empCode,
+        reporterName: (configData.employees[empCode] || {}).name || "",
+        ca1: document.getElementById('ca1').value,
+        ca4: document.getElementById('ca4').value,
+        ca2: document.getElementById('ca2').value,
+        ca3: document.getElementById('ca3').value,
+        note: document.getElementById('m_note').value.trim()
+      };
+
+      try {
+        const json = await callGasApi("submitMainMeal", { payload: payload });
+        if (json.status === "error") throw new Error(json.message);
+
+        document.getElementById('formMain').classList.add('hidden');
+        document.getElementById('successMsg').innerText = "Đã Lưu Báo Cáo Suất Chính!";
+        document.getElementById('successBox').classList.remove('hidden');
+      } catch (err) {
+        alert("Lỗi: " + err.message);
+        btn.disabled = false;
+        btn.innerText = 'Xác Nhận Báo Suất Chính';
+      }
+    });
+
+    // =========================================================================
+    // 7. GỬI FORM TĂNG CA QUA FETCH API
+    // =========================================================================
+    document.getElementById('formExtra').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const dept = document.getElementById('e_dept').value;
+      const reporterCode = document.getElementById('e_reporterCode').value.trim().toUpperCase();
+      const rows = document.querySelectorAll('#employeeListContainer > div');
+      if (!dept || rows.length === 0) {
+        alert("Vui lòng kiểm tra lại thông tin tăng ca!");
+        return;
+      }
+
+      const list = [];
+      const codeCheckSet = new Set();
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const code = row.querySelector('.emp-code').value.trim().toUpperCase();
+        const name = row.querySelector('.emp-name').value.trim();
+        const dish = row.querySelector('.emp-dish').value;
+        const note = row.querySelector('.emp-note').value.trim();
+
+        if (!code || !name) {
+          alert(`Dòng số ${i + 1}: Vui lòng điền đủ Mã NV và Họ tên!`);
+          return;
+        }
+        if (codeCheckSet.has(code)) {
+          alert(`Mã [${code}] bị trùng 2 lần trong danh sách!`);
+          return;
+        }
+        codeCheckSet.add(code);
+        list.push({ code, name, dish, note });
+      }
+
+      const btn = document.getElementById('btnExtraSubmit');
+      btn.disabled = true;
+      btn.innerText = `Đang lưu ${list.length} suất...`;
+
+      try {
+        const json = await callGasApi("submitExtraMealBatch", {
+          payload: {
+            department: dept,
+            reporterCode: reporterCode,
+            reporterName: (configData.employees[reporterCode] || {}).name || "",
+            list: list
+          }
+        });
+        if (json.status === "error") throw new Error(json.message);
+
+        document.getElementById('formExtra').classList.add('hidden');
+        document.getElementById('successMsg').innerText = `Đã Lưu ${json.data.count} Suất Tăng Ca!`;
+        document.getElementById('successBox').classList.remove('hidden');
+      } catch (err) {
+        alert("Lỗi: " + err.message);
+        btn.disabled = false;
+        btn.innerText = 'Gửi Toàn Bộ Danh Sách Tăng Ca';
+      }
+    });
+  </script>
+</body>
+</html>
