@@ -249,7 +249,7 @@
     // =========================================================================
     // 1. CẤU HÌNH LIÊN KẾT WEB APP GOOGLE APPS SCRIPT
     // =========================================================================
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyJsNdAIM7PovURQeErLRgdWjKXpbO1XLNuY7W5FibrPGmb10bsVNpVpWxg9b7OSmieDQ/exec";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyJsNdAIM7PovURQeErLRgdWjKXpbO1XLNuY7W5FibrPGmb10bsVNpVpWxg9b7OSmieDQ/exec"; //[cite: 12]
 
     let configData = { employees: {}, departments: [], isMainLocked: false, isExtraLocked: false };
     let html5QrScanner = null;
@@ -259,7 +259,33 @@
     let currentScanMeal = "MAIN";
 
     // =========================================================================
-    // HÀM GỌI API QUA JSONP (HOÀN TOÀN KHÔNG BỊ CHẶN BỞI CORS POLICY)
+    // HÀM TRÍCH XUẤT MÃ NHÂN VIÊN CHUẨN DẠNG Vxx-xxxx / Fxx-xxxx
+    // =========================================================================
+    function extractEmpCode(rawText) {
+      if (!rawText) return "";
+      const text = String(rawText).trim();
+
+      // 1. Tìm chính xác mẫu định dạng 3 chữ/số + '-' + 4 số (VD: V26-0076, F24-0001)
+      const match = text.match(/[A-Z0-9]{3}-[0-9]{4}/i);
+      if (match) {
+        return match[0].toUpperCase();
+      }
+
+      // 2. Dự phòng trường hợp mã quét viết liền không có dấu gạch (VD: V260076)
+      const matchNoHyphen = text.match(/([A-Z][0-9]{2})([0-9]{4})/i);
+      if (matchNoHyphen) {
+        return `${matchNoHyphen[1].toUpperCase()}-${matchNoHyphen[2]}`;
+      }
+
+      return text.toUpperCase();
+    }
+
+    function isValidEmpCodePattern(code) {
+      return /^[A-Z0-9]{3}-[0-9]{4}$/i.test(code);
+    }
+
+    // =========================================================================
+    // HÀM GỌI API QUA JSONP (TRÁNH LỖI CORS TRÊN VERCEL)
     // =========================================================================
     function callGasApi(action, payload = {}) {
       return new Promise((resolve, reject) => {
@@ -351,8 +377,8 @@
             const row = rows[r];
             if (!row || row.length === 0) continue;
 
-            const rawCode = String(row[colCode] || "").trim().toUpperCase();
-            if (!rawCode || rawCode === "NAN" || rawCode.length < 5) continue;
+            const rawCode = extractEmpCode(row[colCode]);
+            if (!rawCode || rawCode === "NAN" || !isValidEmpCodePattern(rawCode)) continue;
 
             // Bỏ qua người không ăn (Use Meal = 'N')
             const useMeal = String(row[colUseMeal] || "").trim().toUpperCase();
@@ -588,8 +614,15 @@
       if (isProcessingScan) return;
       isProcessingScan = true;
 
-      let code = decodedText.trim();
-      if (code.includes("/")) code = code.split("/").pop();
+      // Trích xuất mã nhân viên Vxx-xxxx từ nội dung quét
+      const code = extractEmpCode(decodedText);
+
+      if (!isValidEmpCodePattern(code)) {
+        playBeep('error');
+        showScanFeedback('error', 'Mã QR không hợp lệ', `Không tìm thấy mã dạng Vxx-xxxx trong nội dung: "${decodedText.substring(0, 30)}..."`);
+        setTimeout(() => { isProcessingScan = false; }, 2000);
+        return;
+      }
 
       executeCheckIn(code, () => {
         setTimeout(() => { isProcessingScan = false; }, 1800);
@@ -629,9 +662,13 @@
                         || jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
 
           if (codeResult && codeResult.data) {
-            let text = codeResult.data.trim();
-            if (text.includes("/")) text = text.split("/").pop();
-            executeCheckIn(text);
+            const code = extractEmpCode(codeResult.data);
+            if (!isValidEmpCodePattern(code)) {
+              playBeep('error');
+              showScanFeedback('error', 'Mã QR không hợp lệ', `Không tìm thấy mã NV dạng Vxx-xxxx trong ảnh vừa quét.`);
+            } else {
+              executeCheckIn(code);
+            }
           } else {
             playBeep('error');
             showScanFeedback('error', 'Không tìm thấy mã QR', 'Vui lòng chụp ảnh góc thẳng, rõ nét.');
@@ -645,11 +682,19 @@
 
     function submitManualCheckIn() {
       const input = document.getElementById('manualEmpCode');
-      const code = input.value.trim().toUpperCase();
-      if (!code) {
+      const rawVal = input.value.trim();
+      if (!rawVal) {
         alert("Vui lòng nhập mã nhân viên!");
         return;
       }
+
+      const code = extractEmpCode(rawVal);
+      if (!isValidEmpCodePattern(code)) {
+        alert(`Mã "${rawVal}" không đúng định dạng chuẩn Vxx-xxxx (VD: V26-0076)!`);
+        input.focus();
+        return;
+      }
+
       const btn = document.getElementById('btnManualSubmit');
       btn.disabled = true;
       btn.innerText = "...";
@@ -797,7 +842,7 @@
       let codeInput = (mode === 'main') ? document.getElementById('m_empCode') : document.getElementById('e_reporterCode');
       let nameTag = (mode === 'main') ? document.getElementById('m_empNameTag') : document.getElementById('e_repNameTag');
 
-      const code = codeInput.value.trim().toUpperCase();
+      const code = extractEmpCode(codeInput.value);
       const info = configData.employees[code];
 
       if (info) {
@@ -812,9 +857,14 @@
     }
 
     function onRowEmpCodeChange(inputElem) {
-      const code = inputElem.value.trim().toUpperCase();
+      const code = extractEmpCode(inputElem.value);
       const row = inputElem.closest('.emp-row-card');
       if (!row) return;
+
+      // Tự chuẩn hóa ô nhập nếu người dùng dán cả chuỗi mã kèm tên
+      if (isValidEmpCodePattern(code) && inputElem.value.trim() !== code) {
+        inputElem.value = code;
+      }
 
       const nameInput = row.querySelector('.emp-name');
       const hintElem = row.querySelector('.row-hint');
@@ -852,7 +902,7 @@
         <div class="grid grid-cols-2 gap-2">
           <input type="text" placeholder="Mã NV (VD: V26-0076)" value="${code}" required 
                  list="extraEmpSuggestions"
-                 oninput="this.value = this.value.toUpperCase().trim(); onRowEmpCodeChange(this)" 
+                 oninput="onRowEmpCodeChange(this)" 
                  class="emp-code bg-white border border-slate-300 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500 font-semibold uppercase">
           <input type="text" placeholder="Họ và tên (Tự động)" value="${name}" required 
                  class="emp-name bg-white border border-slate-300 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500 font-medium">
@@ -949,7 +999,7 @@
         alert("Vui lòng chọn bộ phận và nhập số suất hợp lệ!");
         return;
       }
-      const empCode = document.getElementById('m_empCode').value.trim().toUpperCase();
+      const empCode = extractEmpCode(document.getElementById('m_empCode').value);
       const btn = document.getElementById('btnMainSubmit');
       btn.disabled = true;
       btn.innerText = 'Đang gửi dữ liệu...';
@@ -985,7 +1035,7 @@
     document.getElementById('formExtra').addEventListener('submit', async function(e) {
       e.preventDefault();
       const dept = document.getElementById('e_dept').value;
-      const reporterCode = document.getElementById('e_reporterCode').value.trim().toUpperCase();
+      const reporterCode = extractEmpCode(document.getElementById('e_reporterCode').value);
       const rows = document.querySelectorAll('#employeeListContainer > div');
       if (!dept || rows.length === 0) {
         alert("Vui lòng kiểm tra lại thông tin tăng ca!");
@@ -996,13 +1046,17 @@
       const codeCheckSet = new Set();
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        const code = row.querySelector('.emp-code').value.trim().toUpperCase();
+        const code = extractEmpCode(row.querySelector('.emp-code').value);
         const name = row.querySelector('.emp-name').value.trim();
         const dish = row.querySelector('.emp-dish').value;
         const note = row.querySelector('.emp-note').value.trim();
 
         if (!code || !name) {
           alert(`Dòng số ${i + 1}: Vui lòng điền đủ Mã NV và Họ tên!`);
+          return;
+        }
+        if (!isValidEmpCodePattern(code)) {
+          alert(`Dòng số ${i + 1}: Mã NV '${code}' không đúng định dạng chuẩn (Vxx-xxxx)!`);
           return;
         }
         if (codeCheckSet.has(code)) {
