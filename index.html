@@ -32,6 +32,17 @@
       </button>
     </div>
 
+    <!-- CẢNH BÁO KHI KHÔNG DÙNG WIFI CÔNG TY -->
+    <div id="wifiWarning" class="hidden p-4 bg-rose-50 border-b border-rose-200 text-center">
+      <div class="text-2xl mb-1">📶⛔</div>
+      <div class="text-sm font-bold text-rose-700">YÊU CẦU KẾT NỐI WIFI CÔNG TY</div>
+      <p class="text-xs text-rose-600 mt-1">
+        Hệ thống phát hiện bạn đang dùng 4G hoặc mạng ngoài.<br>
+        Vui lòng bật Wi-Fi và kết nối vào mạng công ty để đăng ký suất ăn.
+      </p>
+      <div id="currentClientIp" class="text-[10px] text-slate-400 mt-2"></div>
+    </div>
+
     <!-- Màn hình tải dữ liệu -->
     <div id="loading" class="p-8 text-center text-slate-500 text-sm">
       <div class="animate-spin w-7 h-7 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
@@ -246,6 +257,66 @@
   </div>
 
   <script>
+    // =========================================================================
+    // DANH SÁCH IP PUBLIC ĐƯỢC PHÉP ĐĂNG KÝ (IP WIFI CÔNG TY)
+    // =========================================================================
+    const ALLOWED_COMPANY_IPS = [
+      "14.178.128.28", // https://api.ipify.org/
+      // "14.232.100.20", // Điền thêm nếu công ty có 2-3 đường truyền Wi-Fi
+    ];
+
+    let isCompanyWifi = false;
+
+    // Hàm kiểm tra IP người dùng khi mở trang
+    async function verifyNetworkIp() {
+      try {
+        // Gọi API lấy IP Public của thiết bị đang truy cập
+        const res = await fetch("https://api.ipify.org?format=json");
+        const data = await res.json();
+        const clientIp = data.ip;
+
+        console.log("IP thiết bị hiện tại:", clientIp);
+
+        // Kiểm tra xem IP có nằm trong danh sách IP công ty không
+        if (ALLOWED_COMPANY_IPS.includes(clientIp)) {
+          isCompanyWifi = true;
+          document.getElementById("wifiWarning").classList.add("hidden");
+        } else {
+          isCompanyWifi = false;
+          blockFormsForExternalNetwork(clientIp);
+        }
+      } catch (err) {
+        console.warn("Không thể kiểm tra IP qua ipify:", err);
+        // Nếu mạng công ty chặn gọi ipify, có thể bỏ qua hoặc xử lý dự phòng
+      }
+    }
+
+    // Hàm vô hiệu hóa các nút nộp khi ở mạng ngoài
+    function blockFormsForExternalNetwork(clientIp) {
+      const warning = document.getElementById("wifiWarning");
+      const ipText = document.getElementById("currentClientIp");
+      warning.classList.remove("hidden");
+      ipText.innerText = `(IP hiện tại của bạn: ${clientIp})`;
+
+      // Khóa nút nộp Suất chính
+      const btnMain = document.getElementById("btnMainSubmit");
+      if (btnMain) {
+        btnMain.disabled = true;
+        btnMain.classList.add("opacity-50", "cursor-not-allowed");
+        btnMain.innerText = "Chỉ cho phép gửi khi dùng Wi-Fi công ty";
+      }
+
+      // Khóa nút nộp Tăng ca
+      const btnExtra = document.getElementById("btnExtraSubmit");
+      if (btnExtra) {
+        btnExtra.disabled = true;
+        btnExtra.classList.add("opacity-50", "cursor-not-allowed");
+        btnExtra.innerText = "Chỉ cho phép gửi khi dùng Wi-Fi công ty";
+      }
+    }
+
+
+
     // =========================================================================
     // 1. CẤU HÌNH LIÊN KẾT WEB APP GOOGLE APPS SCRIPT
     // =========================================================================
@@ -929,6 +1000,12 @@
     // 5. KHỞI TẠO NẠP DỮ LIỆU
     // =========================================================================
     document.addEventListener("DOMContentLoaded", async function() {
+      // 1. Kiểm tra IP mạng ngay khi mở web
+      await verifyNetworkIp();
+      if (!isCompanyWifi) {
+        alert("Bạn đang dùng 4G hoặc mạng ngoài. Vui lòng kết nối Wi-Fi công ty để gửi báo cáo!");
+        return;
+      }
       const savedDept = localStorage.getItem('app_dept') || '';
       const savedRepCode = localStorage.getItem('app_rep_code') || '';
 
