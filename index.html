@@ -112,7 +112,7 @@
     </form>
 
     <!-- ========================================================================= -->
-    <!-- TAB 2: FORM BÁO TĂNG CA (TỰ ĐỘNG NHẬP EXCEL) -->
+    <!-- TAB 2: FORM BÁO TĂNG CA (TỰ ĐỘNG NHẬP EXCEL & CHỌN CA ĂN) -->
     <!-- ========================================================================= -->
     <form id="formExtra" class="hidden p-4 space-y-4">
       <div id="extraLockNotice" class="hidden text-xs text-rose-700 font-bold bg-rose-50 p-2.5 rounded-lg border border-rose-200 text-center">
@@ -120,7 +120,7 @@
       </div>
 
       <div class="bg-amber-50 border-l-4 border-amber-500 p-2.5 rounded text-xs text-amber-800">
-        Đăng ký suất ăn tăng ca cho bộ phận (Chốt lúc <b>15:15</b>).
+        Đăng ký suất ăn tăng ca cho bộ phận (Chốt lúc <b>15:15</b>). Cho phép bổ sung thêm người nhiều lần.
       </div>
 
       <!-- KHU VỰC NHẬP FILE EXCEL TỰ ĐỘNG -->
@@ -161,7 +161,7 @@
             + Thêm người
           </button>
         </div>
-        <div id="employeeListContainer" class="space-y-2.5 max-h-[360px] overflow-y-auto pr-1"></div>
+        <div id="employeeListContainer" class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1"></div>
       </div>
 
       <button type="submit" id="btnExtraSubmit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-xl shadow transition">
@@ -261,24 +261,27 @@
     // DANH SÁCH IP PUBLIC ĐƯỢC PHÉP ĐĂNG KÝ (IP WIFI CÔNG TY)
     // =========================================================================
     const ALLOWED_COMPANY_IPS = [
-      "14.178.128.28", // https://api.ipify.org/
-      // "14.232.100.20", // Điền thêm nếu công ty có 2-3 đường truyền Wi-Fi
+      "14.178.128.28", 
+      "27.67.94.139"
     ];
 
     let isCompanyWifi = false;
 
-    // Hàm kiểm tra IP người dùng khi mở trang
+    function checkValidIp(clientIp) {
+      if (ALLOWED_COMPANY_IPS.includes(clientIp)) return true;
+      if (clientIp.startsWith("27.67.")) return true; 
+      return false;
+    }
+
     async function verifyNetworkIp() {
       try {
-        // Gọi API lấy IP Public của thiết bị đang truy cập
         const res = await fetch("https://api.ipify.org?format=json");
         const data = await res.json();
         const clientIp = data.ip;
 
         console.log("IP thiết bị hiện tại:", clientIp);
 
-        // Kiểm tra xem IP có nằm trong danh sách IP công ty không
-        if (ALLOWED_COMPANY_IPS.includes(clientIp)) {
+        if (checkValidIp(clientIp)) {
           isCompanyWifi = true;
           document.getElementById("wifiWarning").classList.add("hidden");
         } else {
@@ -287,18 +290,15 @@
         }
       } catch (err) {
         console.warn("Không thể kiểm tra IP qua ipify:", err);
-        // Nếu mạng công ty chặn gọi ipify, có thể bỏ qua hoặc xử lý dự phòng
       }
     }
 
-    // Hàm vô hiệu hóa các nút nộp khi ở mạng ngoài
     function blockFormsForExternalNetwork(clientIp) {
       const warning = document.getElementById("wifiWarning");
       const ipText = document.getElementById("currentClientIp");
       warning.classList.remove("hidden");
       ipText.innerText = `(IP hiện tại của bạn: ${clientIp})`;
 
-      // Khóa nút nộp Suất chính
       const btnMain = document.getElementById("btnMainSubmit");
       if (btnMain) {
         btnMain.disabled = true;
@@ -306,7 +306,6 @@
         btnMain.innerText = "Chỉ cho phép gửi khi dùng Wi-Fi công ty";
       }
 
-      // Khóa nút nộp Tăng ca
       const btnExtra = document.getElementById("btnExtraSubmit");
       if (btnExtra) {
         btnExtra.disabled = true;
@@ -315,12 +314,10 @@
       }
     }
 
-
-
     // =========================================================================
     // 1. CẤU HÌNH LIÊN KẾT WEB APP GOOGLE APPS SCRIPT
     // =========================================================================
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyJsNdAIM7PovURQeErLRgdWjKXpbO1XLNuY7W5FibrPGmb10bsVNpVpWxg9b7OSmieDQ/exec"; //[cite: 12]
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyJsNdAIM7PovURQeErLRgdWjKXpbO1XLNuY7W5FibrPGmb10bsVNpVpWxg9b7OSmieDQ/exec";
 
     let configData = { employees: {}, departments: [], isMainLocked: false, isExtraLocked: false };
     let html5QrScanner = null;
@@ -329,24 +326,15 @@
     let sessionCount = 0;
     let currentScanMeal = "MAIN";
 
-    // =========================================================================
-    // HÀM TRÍCH XUẤT MÃ NHÂN VIÊN CHUẨN DẠNG Vxx-xxxx / Fxx-xxxx
-    // =========================================================================
     function extractEmpCode(rawText) {
       if (!rawText) return "";
       const text = String(rawText).trim();
 
-      // 1. Tìm chính xác mẫu định dạng 3 chữ/số + '-' + 4 số (VD: V26-0076, F24-0001)
       const match = text.match(/[A-Z0-9]{3}-[0-9]{4}/i);
-      if (match) {
-        return match[0].toUpperCase();
-      }
+      if (match) return match[0].toUpperCase();
 
-      // 2. Dự phòng trường hợp mã quét viết liền không có dấu gạch (VD: V260076)
       const matchNoHyphen = text.match(/([A-Z][0-9]{2})([0-9]{4})/i);
-      if (matchNoHyphen) {
-        return `${matchNoHyphen[1].toUpperCase()}-${matchNoHyphen[2]}`;
-      }
+      if (matchNoHyphen) return `${matchNoHyphen[1].toUpperCase()}-${matchNoHyphen[2]}`;
 
       return text.toUpperCase();
     }
@@ -355,9 +343,6 @@
       return /^[A-Z0-9]{3}-[0-9]{4}$/i.test(code);
     }
 
-    // =========================================================================
-    // HÀM GỌI API QUA JSONP (TRÁNH LỖI CORS TRÊN VERCEL)
-    // =========================================================================
     function callGasApi(action, payload = {}) {
       return new Promise((resolve, reject) => {
         const callbackName = 'gas_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
@@ -396,7 +381,7 @@
     }
 
     // =========================================================================
-    // 2. TỰ ĐỘNG ĐỌC & XỬ LÝ FILE EXCEL
+    // TỰ ĐỘNG ĐỌC EXCEL VÀ QUY ĐỔI CA ĂN DỰA TRÊN CỘT "PLAN FROM" (GIỜ BẮT ĐẦU)
     // =========================================================================
     function handleExcelImport(inputElem) {
       if (!inputElem.files || !inputElem.files[0]) return;
@@ -418,7 +403,7 @@
           }
 
           let headerIdx = -1;
-          let colCode = 1, colName = 2, colDept = 9, colUseMeal = 24, colRemark = 25;
+          let colCode = 1, colName = 2, colDept = 9, colPlanFrom = -1, colUseMeal = 24, colRemark = 25;
 
           for (let r = 0; r < rows.length; r++) {
             const rowVals = rows[r].map(v => String(v).trim().toLowerCase());
@@ -429,6 +414,8 @@
                 if (val.includes("mã nhân viên") || val.includes("employee code")) colCode = c;
                 if (val.includes("tên nhân viên") || val.includes("full name")) colName = c;
                 if (val.includes("tên phòng") || val.includes("department name") || val.includes("tên bộ phận")) colDept = c;
+                // Nhận diện cột "Plan From" hoặc "Kế hoạch từ" (Cột V trong ảnh của bạn)
+                if (val.includes("plan from") || val.includes("kế hoạch từ") || val.includes("từ")) colPlanFrom = c;
                 if (val.includes("dùng bữa ăn") || val.includes("use meal")) colUseMeal = c;
                 if (val.includes("ghi chú") || val.includes("remark")) colRemark = c;
               }
@@ -451,7 +438,7 @@
             const rawCode = extractEmpCode(row[colCode]);
             if (!rawCode || rawCode === "NAN" || !isValidEmpCodePattern(rawCode)) continue;
 
-            // Bỏ qua người không ăn (Use Meal = 'N')
+            // Bỏ qua nếu cột "Use Meal" là N
             const useMeal = String(row[colUseMeal] || "").trim().toUpperCase();
             if (useMeal === 'N') continue;
 
@@ -466,7 +453,27 @@
               detectedDept = configData.employees[rawCode].dept;
             }
 
-            // Tự động phân loại món ăn
+            // Tự động suy luận Ca ăn từ giờ bắt đầu trong cột "Plan From" (VD: 02:00:00 hoặc 17:00:00)
+            let planFromVal = colPlanFrom !== -1 ? String(row[colPlanFrom] || "").trim() : "";
+            let mappedShift = "Ca 2 (17:00 - 18:30)"; // Mặc định
+
+            // Trích xuất số giờ từ chuỗi ngày tháng (VD lấy "17:00" từ "07/10/2026 17:00:00")
+            let hourMatch = planFromVal.match(/(\d{1,2}):(\d{2})/);
+            if (hourMatch) {
+              let hour = parseInt(hourMatch[1], 10);
+              // Phân loại ca dựa vào giờ bắt đầu thực tế trong doanh nghiệp:
+              if (hour >= 10 && hour < 14) {
+                mappedShift = "Ca 4 - HC (12:00)";
+              } else if (hour >= 6 && hour < 10) {
+                mappedShift = "Ca 1 (11:00)";
+              } else if (hour >= 22 || hour < 6) {
+                mappedShift = "Ca 3 (00:20 - 02:00)";
+              } else {
+                mappedShift = "Ca 2 (17:00 - 18:30)";
+              }
+            }
+
+            // Phân loại món ăn từ cột Remark (Cột Z)
             const remark = String(row[colRemark] || "").trim();
             const remLower = remark.toLowerCase();
             let dish = "Bún / Phở";
@@ -479,6 +486,7 @@
             importedList.push({
               code: rawCode,
               name: name,
+              shift: mappedShift,
               dish: dish,
               note: remark
             });
@@ -489,7 +497,6 @@
             return;
           }
 
-          // Tự động chọn Bộ phận trên form
           if (detectedDept) {
             const eDeptSelect = document.getElementById('e_dept');
             for (let i = 0; i < eDeptSelect.options.length; i++) {
@@ -502,16 +509,15 @@
             }
           }
 
-          // Điền danh sách vào giao diện
           const container = document.getElementById('employeeListContainer');
           container.innerHTML = "";
 
           importedList.forEach(item => {
-            addEmployeeRow(false, item.code, item.name, item.dish, item.note);
+            addEmployeeRow(false, item.code, item.name, item.shift, item.dish, item.note);
           });
 
           document.getElementById('extraCountLabel').innerText = `Danh sách tăng ca: (${importedList.length} người)`;
-          alert(`✅ Đã tải thành công ${importedList.length} nhân viên tăng ca từ file Excel!`);
+          alert(`✅ Đã tải thành công ${importedList.length} nhân viên và tự động nhận diện ca ăn từ file Excel!`);
 
         } catch (err) {
           console.error(err);
@@ -685,7 +691,6 @@
       if (isProcessingScan) return;
       isProcessingScan = true;
 
-      // Trích xuất mã nhân viên Vxx-xxxx từ nội dung quét
       const code = extractEmpCode(decodedText);
 
       if (!isValidEmpCodePattern(code)) {
@@ -932,7 +937,6 @@
       const row = inputElem.closest('.emp-row-card');
       if (!row) return;
 
-      // Tự chuẩn hóa ô nhập nếu người dùng dán cả chuỗi mã kèm tên
       if (isValidEmpCodePattern(code) && inputElem.value.trim() !== code) {
         inputElem.value = code;
       }
@@ -958,7 +962,8 @@
       }
     }
 
-    function addEmployeeRow(shouldFocus = false, code = '', name = '', dish = 'Bún / Phở', note = '') {
+    // HÀM TẠO DÒNG NHÂN VIÊN TĂNG CA (ĐÃ THÊM THẢ CHỌN CA ĂN)
+    function addEmployeeRow(shouldFocus = false, code = '', name = '', shift = 'Ca 2 (17:00 - 18:30)', dish = 'Bún / Phở', note = '') {
       const container = document.getElementById('employeeListContainer');
       const rowId = 'row_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
 
@@ -978,7 +983,13 @@
           <input type="text" placeholder="Họ và tên (Tự động)" value="${name}" required 
                  class="emp-name bg-white border border-slate-300 rounded p-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500 font-medium">
         </div>
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-1.5">
+          <select class="emp-shift bg-white border border-slate-300 rounded p-1.5 text-xs font-semibold text-blue-700 outline-none">
+            <option value="Ca 1 (11:00)" ${shift.includes('Ca 1') ? 'selected' : ''}>Ca 1 (11:00)</option>
+            <option value="Ca 4 - HC (12:00)" ${shift.includes('Ca 4') ? 'selected' : ''}>Ca 4 - HC</option>
+            <option value="Ca 2 (17:00 - 18:30)" ${shift.includes('Ca 2') ? 'selected' : ''}>Ca 2 (17:00)</option>
+            <option value="Ca 3 (00:20 - 02:00)" ${shift.includes('Ca 3') ? 'selected' : ''}>Ca 3 (Đêm)</option>
+          </select>
           <select class="emp-dish bg-white border border-slate-300 rounded p-1.5 text-xs font-medium text-slate-700 outline-none">
             <option value="Bún / Phở" ${dish === 'Bún / Phở' ? 'selected' : ''}>Bún / Phở</option>
             <option value="Bánh mỳ sữa" ${dish === 'Bánh mỳ sữa' ? 'selected' : ''}>Bánh mỳ sữa</option>
@@ -1000,12 +1011,8 @@
     // 5. KHỞI TẠO NẠP DỮ LIỆU
     // =========================================================================
     document.addEventListener("DOMContentLoaded", async function() {
-      // 1. Kiểm tra IP mạng ngay khi mở web
       await verifyNetworkIp();
-      if (!isCompanyWifi) {
-        alert("Bạn đang dùng 4G hoặc mạng ngoài. Vui lòng kết nối Wi-Fi công ty để gửi báo cáo!");
-        return;
-      }
+
       const savedDept = localStorage.getItem('app_dept') || '';
       const savedRepCode = localStorage.getItem('app_rep_code') || '';
 
@@ -1070,6 +1077,10 @@
     // =========================================================================
     document.getElementById('formMain').addEventListener('submit', async function(e) {
       e.preventDefault();
+      if (!isCompanyWifi) {
+        alert("Bạn đang dùng 4G hoặc mạng ngoài. Vui lòng kết nối Wi-Fi công ty để gửi báo cáo!");
+        return;
+      }
       const dept = document.getElementById('m_dept').value;
       const total = calculateMainTotal();
       if (!dept || total <= 0) {
@@ -1107,10 +1118,14 @@
     });
 
     // =========================================================================
-    // 7. GỬI FORM TĂNG CA
+    // 7. GỬI FORM TĂNG CA (GỬI CA ĂN VÀ KHÔNG BỊ KHÓA BỔ SUNG KHẮT KHE)
     // =========================================================================
     document.getElementById('formExtra').addEventListener('submit', async function(e) {
       e.preventDefault();
+      if (!isCompanyWifi) {
+        alert("Bạn đang dùng 4G hoặc mạng ngoài. Vui lòng kết nối Wi-Fi công ty để gửi báo cáo!");
+        return;
+      }
       const dept = document.getElementById('e_dept').value;
       const reporterCode = extractEmpCode(document.getElementById('e_reporterCode').value);
       const rows = document.querySelectorAll('#employeeListContainer > div');
@@ -1125,6 +1140,7 @@
         const row = rows[i];
         const code = extractEmpCode(row.querySelector('.emp-code').value);
         const name = row.querySelector('.emp-name').value.trim();
+        const shift = row.querySelector('.emp-shift').value;
         const dish = row.querySelector('.emp-dish').value;
         const note = row.querySelector('.emp-note').value.trim();
 
@@ -1137,11 +1153,11 @@
           return;
         }
         if (codeCheckSet.has(code)) {
-          alert(`Mã [${code}] bị trùng 2 lần trong danh sách!`);
+          alert(`Mã [${code}] bị trùng 2 lần trong cùng 1 lần gửi này!`);
           return;
         }
         codeCheckSet.add(code);
-        list.push({ code, name, dish, note });
+        list.push({ code, name, mealShift: shift, dish, note });
       }
 
       const btn = document.getElementById('btnExtraSubmit');
